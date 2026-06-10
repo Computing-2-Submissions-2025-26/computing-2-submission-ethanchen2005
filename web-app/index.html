@@ -1,9 +1,198 @@
-<!-- In HTML Comments are written like this -->
-<!-- They can all be removed for your apps -->
-<!doctype html> <!-- This first line tells browsers to expect modern standard html 5 -->
-<html lang="en-gb"> <!-- This is indicates the page is written in British English, useful for accessibility -->
-<meta charset="utf-8"> <!-- This indicates how the file is encoded. utf-8 is standard -->
-<title>Your Web-app Title</title> <!-- All pages need a title, this will be displayed in the browser's title bar -->
-<link rel="stylesheet" href="default.css"> <!-- Import style sheet – default.css -->
-<link rel="icon" href="./assets/favicon.png"> <!-- Import 'Favorites Icon' – favicon.png -->
-<script type="module" src="main.js"></script> <!-- Load the main script. Must be type="module". Have only one of these -->
+<!doctype html>
+<html lang="en-gb">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Slime Reaction</title>
+        <link rel="stylesheet" href="default.css">
+        <link rel="icon" href="./assets/player/blue-player.png">
+        <script type="module" src="main.js"></script>
+    </head>
+    <body>
+        <main>
+            <section id="landing_screen" class="screen landing_screen" aria-labelledby="landing_title">
+                <div class="corner_tools" aria-label="Menu tools">
+                    <button id="music_button" class="image_button" type="button" aria-label="Toggle music">
+                        <img src="./assets/UI icon/sound-icon.png" alt="">
+                    </button>
+                    <button id="settings_button" class="image_button" type="button" aria-label="Settings">
+                        <img src="./assets/UI icon/option-icon.png" alt="">
+                    </button>
+                </div>
+
+                <div class="title_panel">
+                    <h1 id="landing_title" class="sr_only">Slime Reaction</h1>
+                    <img class="title_logo" src="./assets/background/game-title.png" alt="Slime Reaction">
+                    <img class="hero_slimes" src="./assets/mode/player-mode.png" alt="">
+
+                    <section class="mode_card" aria-labelledby="mode_title">
+                        <h2 id="mode_title">Game Mode</h2>
+                        <div class="mode_toggle" role="group" aria-label="Choose game mode">
+                            <button id="mode_ai_button" class="mode_option active_mode" type="button" data-mode="ai" aria-pressed="true">
+                                <img src="./assets/mode/ai-mode.png" alt="">
+                                <strong>VS AI</strong>
+                            </button>
+                            <span class="mode_slider" aria-hidden="true"><span></span></span>
+                            <button id="mode_player_button" class="mode_option" type="button" data-mode="player" aria-pressed="false">
+                                <strong>VS Player</strong>
+                                <img src="./assets/mode/player-mode.png" alt="">
+                            </button>
+                        </div>
+                    </section>
+
+                    <nav class="main_menu" aria-label="Main menu">
+                        <button id="play_button" class="slime_button primary_button" type="button">Play</button>
+                        <button id="how_to_play_button" class="slime_button green_button" type="button">How To Play</button>
+                    </nav>
+                </div>
+            </section>
+
+            <section id="game_screen" class="screen game_screen hidden" aria-labelledby="game_title">
+                <header class="game_header">
+                    <h1 id="game_title" class="sr_only">Slime Reaction</h1>
+                    <section id="turn_banner" class="turn_banner blue_turn" aria-live="polite">
+                        <img id="turn_image" src="./assets/player/blue-winner.png" alt="">
+                        <div>
+                            <span>Turn <span id="turn_value">1</span></span>
+                            <strong id="turn_title">Blue's Turn</strong>
+                            <p id="turn_copy">Choose an empty pond or one of your own slimes.</p>
+                        </div>
+                    </section>
+                    <div class="game_tools" aria-label="Game tools">
+                        <button id="help_tool_button" class="image_button" type="button" aria-label="How to play">
+                            <img src="./assets/UI icon/tutorial-icon.png" alt="">
+                        </button>
+                        <button id="settings_tool_button" class="image_button" type="button" aria-label="Settings">
+                            <img src="./assets/UI icon/option-icon.png" alt="">
+                        </button>
+                        <button id="home_tool_button" class="image_button" type="button" aria-label="Home">
+                            <img src="./assets/UI icon/home-icon.png" alt="">
+                        </button>
+                    </div>
+                </header>
+
+                <div class="game_layout">
+                    <aside class="side_panel score_panel" aria-label="Score panel">
+                        <section class="leader_card blue_card">
+                            <img src="./assets/player/blue-winner.png" alt="">
+                            <h2>Blue Slimes</h2>
+                            <strong id="blue_tiles">0</strong>
+                            <span>tiles</span>
+                        </section>
+                        <section class="leader_card pink_card">
+                            <img src="./assets/player/red-winner.png" alt="">
+                            <h2>Pink Slimes</h2>
+                            <strong id="red_tiles">0</strong>
+                            <span>tiles</span>
+                        </section>
+                        <div class="control_row">
+                            <button id="hint_button" class="image_button tool_button" type="button" aria-label="Hint">
+                                <img src="./assets/UI icon/hint-icon.png" alt="">
+                                <span>Hint</span>
+                            </button>
+                            <button id="undo_button" class="image_button tool_button" type="button" aria-label="Undo">
+                                <img src="./assets/UI icon/undo-icon.png" alt="">
+                                <span>Undo</span>
+                            </button>
+                            <button id="restart_button" class="small_command" type="button">Restart</button>
+                        </div>
+                    </aside>
+
+                    <section class="board_stage" aria-labelledby="board_title">
+                        <h2 id="board_title" class="sr_only">Pond board</h2>
+                        <output id="status_output" aria-live="polite">Choose a pond tile.</output>
+                        <div id="combo_pop" class="combo_pop" aria-live="polite"></div>
+                        <div class="board_wrap">
+                            <div id="game_board" role="grid" aria-label="Slime Reaction board"></div>
+                        </div>
+                    </section>
+
+                    <aside class="side_panel info_panel" aria-labelledby="selected_title">
+                        <section class="info_card selected_card">
+                            <h2 id="selected_title">Pond Tile</h2>
+                            <div id="selected_cell" class="selected_cell">
+                                <span class="empty_state">Select a pond tile.</span>
+                            </div>
+                        </section>
+                        <section class="info_card">
+                            <h2>Next Capacity</h2>
+                            <dl class="capacity_list">
+                                <div><dt>Corner</dt><dd>2</dd></div>
+                                <div><dt>Edge</dt><dd>3</dd></div>
+                                <div><dt>Center</dt><dd>4</dd></div>
+                            </dl>
+                        </section>
+                        <section class="info_card">
+                            <h2>Stats</h2>
+                            <dl class="mini_stats">
+                                <div><dt>Largest Chain</dt><dd id="largest_chain">0</dd></div>
+                                <div><dt>Captured</dt><dd id="cells_captured">0</dd></div>
+                            </dl>
+                        </section>
+                        <section class="assistant_card">
+                            <p id="assistant_tip">Pick a glowing tile.</p>
+                            <img src="./assets/player/green-slime.png" alt="">
+                        </section>
+                    </aside>
+                </div>
+            </section>
+        </main>
+
+        <dialog id="rules_dialog" class="modal tutorial_modal">
+            <form method="dialog">
+                <h2>How To Play</h2>
+                <div class="tutorial_grid">
+                    <article>
+                        <img src="./assets/tutorial/tutorial-1.png" alt="">
+                        <h3>1. Place</h3>
+                        <p>Place a slime on an empty tile or your own tile.</p>
+                    </article>
+                    <article>
+                        <img src="./assets/tutorial/tutorial-2.png" alt="">
+                        <h3>2. Grow</h3>
+                        <p>Adding slimes increases the count on a tile.</p>
+                    </article>
+                    <article>
+                        <img src="./assets/tutorial/tutorial-3.png" alt="">
+                        <h3>3. Split</h3>
+                        <p>At capacity, a slime splits to neighbours.</p>
+                    </article>
+                    <article>
+                        <img src="./assets/tutorial/tutorial-4.png" alt="">
+                        <h3>4. Capture</h3>
+                        <p>Splashes convert rival slimes to your side.</p>
+                    </article>
+                </div>
+                <button class="slime_button green_button" type="submit">Got It</button>
+            </form>
+        </dialog>
+
+        <dialog id="settings_dialog" class="modal settings_modal">
+            <form method="dialog">
+                <h2>Settings</h2>
+                <label><span>High contrast</span><input id="high_contrast_toggle" type="checkbox"></label>
+                <label><span>Colour blind symbols</span><input id="colour_blind_toggle" type="checkbox"></label>
+                <label><span>Gentle motion</span><input id="reduced_motion_toggle" type="checkbox"></label>
+                <button class="slime_button primary_button" type="submit">Save</button>
+            </form>
+        </dialog>
+
+        <dialog id="game_over_dialog" class="modal game_over_modal">
+            <form method="dialog">
+                <img id="winner_image" class="winner_image" src="./assets/player/blue-winner.png" alt="">
+                <h2 id="game_over_title">Blue Slimes Win</h2>
+                <p id="game_over_copy"></p>
+                <dl class="final_stats">
+                    <div><dt>Score</dt><dd id="final_score">0</dd></div>
+                    <div><dt>Turns</dt><dd id="final_turns">0</dd></div>
+                    <div><dt>Largest Combo</dt><dd id="final_chain">0</dd></div>
+                    <div><dt>Captures</dt><dd id="final_captures">0</dd></div>
+                </dl>
+                <div class="dialog_actions">
+                    <button id="play_again_button" class="slime_button primary_button" type="button">Play Again</button>
+                    <button id="home_after_game_button" class="slime_button green_button" type="button">Home</button>
+                </div>
+            </form>
+        </dialog>
+    </body>
+</html>
