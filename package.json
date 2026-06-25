@@ -3,7 +3,12 @@
   "type": "module",
   "version": "1.0.0",
   "description": "",
-  "main": "web-app/Module.js",
+  "main": "web-app/SlimeReaction.js",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test web-app/tests/*.test.js",
+    "check": "node --check web-app/ramda.js && node --check web-app/SlimeReaction.js && node --check web-app/main.js && node --check server.mjs && node --check web-app/tests/SlimeReaction.test.js"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {

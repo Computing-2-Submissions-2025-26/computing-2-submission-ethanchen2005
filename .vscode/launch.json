@@ -27,12 +27,11 @@
                 "${workspaceFolder}/node_modules/**",
                 "<node_internals>/**"
             ],
-            // You'll need to change this line below to point to your module.
-            "program": "${workspaceFolder}/web-app/Module.js"
+            "program": "${workspaceFolder}/web-app/SlimeReaction.js"
         },
         {
             "name": "Generate Docs",
-            "command": "jsdoc -c jsdoc.json; exit",
+            "command": "npm run docs; exit",
             "request": "launch",
             "type": "node-terminal"
         }

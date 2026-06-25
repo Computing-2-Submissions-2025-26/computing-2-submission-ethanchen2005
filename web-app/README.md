@@ -32,7 +32,8 @@ taken at least one turn.
   after your turn.
 - `VS Player`: Two players share the same screen and take turns manually.
 
-Use the game mode switch on the home screen before pressing `Play`.
+Use the game mode and difficulty switches on the home screen before pressing
+`Play`.
 
 ## Controls
 
@@ -43,10 +44,33 @@ Use the game mode switch on the home screen before pressing `Play`.
   the AI response together.
 - `Restart`: Start the current match again.
 - `Home`: Return to the title screen.
-- `Settings`: Change accessibility options such as reduced motion or contrast.
+- `Sound`: Toggle interface, move, split, invalid move, and victory sound
+  effects.
 
 The board can also be used with the keyboard. Move focus with the arrow keys and
 press `Enter` or `Space` to place a slime.
+
+## Public API
+
+The browser imports `SlimeReaction.js` and uses its public functions rather than
+duplicating the game rules in `main.js`.
+
+- Starting and playing: `startNewGame`, `restartGame`, `placeSlime`,
+  `canPlaceSlime`, and `getPlayableTiles`.
+- Reading the game state: `getPond`, `getPondTile`, `getPlayerToMove`,
+  `getGameStatus`, `getWinner`, `getTerritoryScores`, `getGameStats`, and
+  `getLastPlacement`.
+- Continuing a game: `undoLastTurn`, `saveGame`, and `loadGame`.
+
+The game module returns new game states or copies of state data, so old turns are
+not changed accidentally by the interface.
+
+## Accessibility
+
+The interface uses real buttons, modal dialogs, ARIA live messages, a labelled
+board grid, per-tile labels, and visible focus states. Scores and tile ownership
+are shown with text and numbers as well as colour, so the rules are still
+understandable without relying only on the slime colours.
 
 ## Run the Game
 
@@ -81,7 +105,7 @@ npm run check
 - `web-app/SlimeReaction.js`: pure game module and public game API.
 - `web-app/main.js`: browser UI, rendering, input handling, and AI controller.
 - `web-app/default.css`: visual styling and responsive layout.
-- `web-app/assets/`: game images and interface icons.
+- `web-app/assets/`: game images, interface icons, and sound effects.
 - `web-app/tests/SlimeReaction.test.js`: automated tests for the game module.
 - `web-app/tests/test-specification.md`: test plan and expected behaviour.
 
