@@ -1,53 +1,160 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/H6lPFq0J)
-# Computing 2 Coursework Submission.
-**CID**: [02603570]
+# Slime Reaction
 
-This is the submission template for your Computing 2 Applications coursework submission.
+**CID**: 02603570
 
-## Checklist
+Slime Reaction is my turn-based board game for the Computing 2 Applications
+coursework. Players add slimes to tiles, build them up until they split,
+and try to take over the other player's side through chain reactions.
+
+The game logic is separate from the browser code. `SlimeReaction.js` holds the
+rules and public API, while `main.js` only uses that API to render the board,
+handle input, play sounds, and run the simple AI.
+
+## How to play
+
+Blue always moves first. On a turn, a player can place a slime on an empty pond
+tile or on one of their own tiles.
+
+Each tile has a capacity:
+
+- Corner tiles split at 2 slimes.
+- Edge tiles split at 3 slimes.
+- Centre tiles split at 4 slimes.
+
+When a tile reaches its capacity, it splits. The slime moves into neighbouring
+tiles, which can capture enemy tiles and trigger more splits. A player wins
+when the other player has no tiles left after both players have taken at least
+one turn.
+
+## Game modes
+
+- `VS AI`: the user plays as Blue and the Pink Slime AI replies after each move.
+- `VS Player`: two players share the same screen and take turns manually.
+
+The home screen also has Easy, Medium, and Hard board sizes.
+
+## Controls
+
+- `Play`: start a new match.
+- `How To Play`: open the visual rule guide.
+- `Hint`: highlight a useful legal move.
+- `Undo`: go back one move. In `VS AI` mode, this rewinds the player move and
+  the AI reply together.
+- `Restart`: start the current match again.
+- `Home`: return to the title screen.
+- `Sound`: toggle interface, move, split, invalid move, and victory sounds.
+
+The board also works with the keyboard. Move focus with the arrow keys and press
+`Enter` or `Space` to place a slime.
+
+## Coursework checklist
+
 ### Install dependencies locally
-This template relies on a a few packages from the Node Package Manager, npm.
-To install them run the following commands in the terminal.
-```properties
+
+- [x] Dependencies are listed in `package.json`.
+- [x] Dependencies install with `npm install`.
+
+### Game module API
+
+- [x] A documented JavaScript module is included in `web-app/SlimeReaction.js`.
+- [x] `jsdoc.json` points to the game module.
+- [x] JSDoc has been generated into `docs/`.
+- [x] Generated API documentation has been checked.
+
+### Game module implementation
+
+- [x] The game module API is implemented.
+- [x] Game rules can be simulated independently from the browser UI.
+
+### Unit test specification
+
+- [x] Behavioural test descriptions are included in `web-app/tests`.
+- [x] The tests describe externally visible game behaviour.
+
+### Unit test implementation
+
+- [x] Automated tests are implemented.
+- [x] Tests run with `npm test`.
+
+### Web application
+
+- [x] `web-app/index.html` is implemented.
+- [x] `web-app/default.css` is implemented.
+- [x] `web-app/main.js` is implemented.
+- [x] Required assets and supporting files are included.
+
+### Final submission
+
+- [x] Push to GitHub.
+- [x] Sync the changes.
+- [x] Check the submission on GitHub.
+
+## Project structure
+
+- `web-app/SlimeReaction.js`: pure game module and public game API.
+- `web-app/main.js`: browser UI, rendering, input handling, sound, and AI.
+- `web-app/default.css`: visual styling and responsive layout.
+- `web-app/index.html`: page structure for the home screen, board, panels, and dialogs.
+- `web-app/assets/`: images, interface icons, and sound effects.
+- `web-app/tests/test-specification.md`: behavioural test plan.
+- `web-app/tests/SlimeReaction.test.js`: automated tests for the game module.
+- `docs/`: generated API documentation linked from the web app.
+
+## Run the game
+
+Install dependencies:
+
+```sh
 npm install
 ```
-These won't be uploaded to your repository because of the `.gitignore`.
-I'll run the same commands when I download your repos.
 
-### Game Module – API
-*You will produce an API specification, i.e. a list of function names and their signatures, for a Javascript module that represents the state of your game and the operations you can perform on it that advances the game or provides information.*
+Start the local web server:
 
-- [ ] Include a `.js ` module file in `/web-app` containing the API using `jsdoc`.
-- [ ] Update `/jsdoc.json` to point to this module in `.source.include` (line 7)
-- [ ] Compile jsdoc using the run configuration `Generate Docs`
-- [ ] Check the generated docs have compiled correctly.
+```sh
+npm start
+```
 
-### Game Module – Implementation
-*You will implement, in Javascript, the module you specified above. Such that your game can be simulated in code, e.g. in the debug console.*
+Open:
 
-- [ ] The file above should be fully implemented.
+```text
+http://localhost:5173
+```
 
-### Unit Tests – Specification
-*For the Game module API you have produced, write a set of unit tests descriptions that specify the expected behaviour of one aspect of your API, e.g. you might pick the win condition, or how the state changes when a move is made.*
+## Test and check
 
-- [ ] Write unit test definitions in `/web-app/tests`.
-- [ ] Check the headings appear in the Testing sidebar.
+Run the unit tests:
 
-### Unit Tests – Implementation
-*Implement in code the unit tests specified above.*
+```sh
+npm test
+```
 
-- [ ] Implement the tests above.
+Run syntax checks:
 
-### Web Application
-*Produce a web application that allows a user to interface with your game module.*
+```sh
+npm run check
+```
 
-- Implement in `/web-app`
-  - [ ] `index.html`
-  - [ ] `default.css`
-  - [ ] `main.js`
-  - [ ] Any other files you need to include.
+The API documentation has already been generated into `docs/` and is linked
+from the web app landing screen.
 
-### Finally
-- [ ] Push to GitHub.
-- [ ] Sync the changes.
-- [ ] Check submission on GitHub website.
+## Public API
+
+The browser imports `SlimeReaction.js` and uses its public functions rather than
+copying the game rules in `main.js`.
+
+- Starting and playing: `startNewGame`, `restartGame`, `placeSlime`,
+  `canPlaceSlime`, and `getPlayableTiles`.
+- Reading the game state: `getPond`, `getPondTile`, `getPlayerToMove`,
+  `getGameStatus`, `getWinner`, `getTerritoryScores`, `getGameStats`, and
+  `getLastPlacement`.
+- Continuing a game: `undoLastTurn`, `saveGame`, and `loadGame`.
+
+The game module returns new game states or copies of state data, so old turns
+are not changed by the interface.
+
+## Accessibility
+
+The interface uses real buttons, modal dialogs, ARIA live messages, a labelled
+board grid, per-tile labels, and visible focus states. Scores and tile ownership
+are shown with text and numbers as well as colour, so the rules do not depend
+only on slime colour.
