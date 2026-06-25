@@ -1,1074 +1,768 @@
+/*jslint long, white*/
+import R from "./ramda.js";
 /**
- * Pure game logic for Slime Reaction.
- *
- * The module is the functional core of the coursework web app. It models a
- * turn-based board game as immutable state values and exposes domain-focused
- * query and transition functions for the UI and tests.
- *
- * @module SlimeReaction
+ * SlimeReaction.js models a turn-based pond game.
+ * Players place slimes, full tiles split, and chain reactions can capture
+ * tiles from the other player.
+ * @namespace SlimeReaction
  */
-"use strict";
 
 /**
+ * A player is one of the two slime teams on the pond.
+ * @memberof SlimeReaction
  * @typedef {"blue" | "red"} Player
  */
 
 /**
+ * A difficulty chooses the size of the pond.
+ * @memberof SlimeReaction
  * @typedef {"easy" | "medium" | "hard"} Difficulty
  */
 
 /**
+ * The game is either still being played, or has a winner.
+ * @memberof SlimeReaction
  * @typedef {"playing" | "won"} GameStatus
  */
 
 /**
- * @typedef {object} Cell
- * @property {Player | null} owner Player controlling the cell.
- * @property {number} count Orb count in the cell.
- * @property {number} capacity Number of neighbours needed to explode.
+ * A pond tile stores who owns it, how many slimes are on it,
+ * and how many slimes it can hold before it splits.
+ * @memberof SlimeReaction
+ * @typedef {{owner: SlimeReaction.Player | null, count: number, capacity: number}} PondTile
  */
 
 /**
- * @typedef {object} Coordinate
- * @property {number} row Zero-based board row.
- * @property {number} column Zero-based board column.
+ * A coordinate points to one tile in the pond.
+ * Rows and columns are zero-based in the module.
+ * @memberof SlimeReaction
+ * @typedef {{row: number, column: number}} Coordinate
  */
 
 /**
- * @typedef {object} Action
- * @property {"placeOrb"} type Domain action type.
- * @property {number} row Zero-based board row.
- * @property {number} column Zero-based board column.
+ * The public game state returned by this module.
+ * Treat it as read-only and use the API to make the next state.
+ * @memberof SlimeReaction
+ * @typedef {Readonly<object>} GameState
  */
 
 /**
- * @typedef {object} GameStats
- * @property {number} totalTurns Number of legal turns completed.
- * @property {number} totalExplosions Total explosions across the game.
- * @property {number} largestChainReaction Largest explosion chain in one move.
- * @property {number} cellsCaptured Opponent cell conversions caused by explosions.
- * @property {Player | null} finalWinner Winner after the game ends.
+ * Options for starting a game.
+ * @memberof SlimeReaction
+ * @typedef {object} GameOptions
+ * @property {SlimeReaction.Difficulty} [difficulty] The named board size.
+ * @property {number} [size] A custom square board size from 3 to 10.
  */
 
-export const BLUE = "blue";
-export const RED = "red";
-export const PLAYERS = Object.freeze([BLUE, RED]);
-export const EMPTY_OWNER = null;
-export const DEFAULT_DIFFICULTY = "easy";
-export const DIFFICULTY_SIZES = Object.freeze({
-    easy: 6,
-    medium: 8,
-    hard: 10
+/**
+ * The score for one player.
+ * @memberof SlimeReaction
+ * @typedef {{slimes: number, tiles: number}} Score
+ */
+const BLUE = "blue";
+const RED = "red";
+const EMPTY_OWNER = null;
+const PLAYERS = Object.freeze([BLUE, RED]);
+const PLAYER_NAMES = Object.freeze({
+    blue: "Blue",
+    red: "Red"
 });
-
-const MIN_CUSTOM_SIZE = 3;
-const MAX_CUSTOM_SIZE = 10;
-const OPENING_TURN_REQUIREMENT = 1;
-
-const ORTHOGONAL_DIRECTIONS = Object.freeze([
-    Object.freeze({ row: -1, column: 0 }),
-    Object.freeze({ row: 1, column: 0 }),
-    Object.freeze({ row: 0, column: -1 }),
-    Object.freeze({ row: 0, column: 1 })
+const DEFAULT_DIFFICULTY = "easy";
+const DIFFICULTY_SIZES = Object.freeze({
+    easy: 6,
+    hard: 10,
+    medium: 8
+});
+const MIN_SIZE = 3;
+const MAX_SIZE = 10;
+const OPENING_TURNS = 1;
+const DIRECTIONS = Object.freeze([
+    Object.freeze({
+        column: 0,
+        row: -1
+    }),
+    Object.freeze({
+        column: 0,
+        row: 1
+    }),
+    Object.freeze({
+        column: -1,
+        row: 0
+    }),
+    Object.freeze({
+        column: 1,
+        row: 0
+    })
 ]);
-
-const range = function (length) {
-    return Array.from({ length }, function (_, index) {
-        return index;
-    });
-};
-
-const copyCell = function (cell) {
-    return {
-        owner: cell.owner,
-        count: cell.count,
-        capacity: cell.capacity
-    };
-};
-
-const copyBoard = function (board) {
-    return board.map(function (row) {
-        return row.map(copyCell);
-    });
-};
-
-const copyTurnsTaken = function (turnsTaken) {
-    return {
-        [BLUE]: turnsTaken[BLUE],
-        [RED]: turnsTaken[RED]
-    };
-};
-
-const copyStats = function (stats) {
-    return {
-        totalTurns: stats.totalTurns,
-        totalExplosions: stats.totalExplosions,
-        largestChainReaction: stats.largestChainReaction,
-        cellsCaptured: stats.cellsCaptured,
-        finalWinner: stats.finalWinner
-    };
-};
-
-const copyCoordinate = function (coordinate) {
-    return {
-        row: coordinate.row,
-        column: coordinate.column
-    };
-};
-
-const copySequenceItem = function (item) {
-    return Object.freeze({
-        row: item.row,
-        column: item.column,
-        owner: item.owner
-    });
-};
-
-const copyLastMove = function (lastMove) {
-    if (lastMove === null) {
-        return null;
-    }
-
-    return {
-        player: lastMove.player,
-        row: lastMove.row,
-        column: lastMove.column,
-        explosions: lastMove.explosions,
-        largestChainReaction: lastMove.largestChainReaction,
-        cellsCaptured: lastMove.cellsCaptured,
-        sequence: lastMove.sequence.map(function (item) {
-            return {
-                row: item.row,
-                column: item.column,
-                owner: item.owner
-            };
-        }),
-        summary: lastMove.summary
-    };
-};
-
-const freezeBoard = function (board) {
-    return Object.freeze(
-        board.map(function (row) {
-            return Object.freeze(
-                row.map(function (cell) {
-                    return Object.freeze(copyCell(cell));
-                })
-            );
-        })
+const otherPlayer = function (player) {
+    return (
+        player === BLUE
+        ? RED
+        : BLUE
     );
 };
-
-const freezeLastMove = function (lastMove) {
-    if (lastMove === null) {
-        return null;
-    }
-
-    return Object.freeze({
-        player: lastMove.player,
-        row: lastMove.row,
-        column: lastMove.column,
-        explosions: lastMove.explosions,
-        largestChainReaction: lastMove.largestChainReaction,
-        cellsCaptured: lastMove.cellsCaptured,
-        sequence: Object.freeze(lastMove.sequence.map(copySequenceItem)),
-        summary: lastMove.summary
-    });
-};
-
-const freezeState = function (state) {
-    return Object.freeze({
-        difficulty: state.difficulty,
-        size: state.size,
-        board: freezeBoard(state.board),
-        currentPlayer: state.currentPlayer,
-        turn: state.turn,
-        turnsTaken: Object.freeze(copyTurnsTaken(state.turnsTaken)),
-        status: state.status,
-        winner: state.winner,
-        stats: Object.freeze(copyStats(state.stats)),
-        lastMove: freezeLastMove(state.lastMove),
-        history: Object.freeze(state.history.slice())
-    });
-};
-
-const isPlayer = function (player) {
-    return PLAYERS.includes(player);
-};
-
-const otherPlayer = function (player) {
-    return player === BLUE ? RED : BLUE;
-};
-
-const isValidDifficulty = function (difficulty) {
+const validDifficulty = function (difficulty) {
     return Object.hasOwn(DIFFICULTY_SIZES, difficulty);
 };
-
-const isValidSize = function (size) {
-    return (
-        Number.isInteger(size)
-        && size >= MIN_CUSTOM_SIZE
-        && size <= MAX_CUSTOM_SIZE
-    );
+const validSize = function (size) {
+    return Number.isInteger(size) && size >= MIN_SIZE && size <= MAX_SIZE;
 };
-
-const isCoordinateValue = function (value) {
-    return Number.isInteger(value);
-};
-
-const isInBounds = function (size, row, column) {
+const inBounds = function (size, row, column) {
     return (
-        isCoordinateValue(row)
-        && isCoordinateValue(column)
+        Number.isInteger(row)
+        && Number.isInteger(column)
         && row >= 0
         && row < size
         && column >= 0
         && column < size
     );
 };
-
 const makeCell = function (owner, count, capacity) {
     return {
-        owner,
+        capacity,
         count,
-        capacity
+        owner
     };
 };
-
-const emptyCell = function (size, row, column) {
-    return makeCell(EMPTY_OWNER, 0, determineCellCapacity(size, row, column));
+const copyCell = function (cell) {
+    return makeCell(cell.owner, cell.count, cell.capacity);
 };
-
-const setCell = function (board, row, column, cell) {
-    return board.map(function (boardRow, rowIndex) {
-        if (rowIndex !== row) {
-            return boardRow.map(copyCell);
-        }
-
-        return boardRow.map(function (existingCell, columnIndex) {
-            return columnIndex === column ? copyCell(cell) : copyCell(existingCell);
-        });
+const copyBoard = function (board) {
+    return R.map(function (row) {
+        return R.map(copyCell, row);
+    }, board);
+};
+const copyStats = function (stats) {
+    return {
+        finalWinner: stats.finalWinner,
+        largestChainReaction: stats.largestChainReaction,
+        tilesCaptured: stats.tilesCaptured,
+        totalExplosions: stats.totalExplosions,
+        totalTurns: stats.totalTurns
+    };
+};
+const copyTurns = function (turns) {
+    return {
+        blue: turns.blue,
+        red: turns.red
+    };
+};
+const copyMove = function (move) {
+    if (move === null) {
+        return null;
+    }
+    return Object.assign({}, move, {
+        sequence: R.map(function (item) {
+            return {
+                column: item.column,
+                owner: item.owner,
+                row: item.row
+            };
+        }, move.sequence)
     });
 };
-
-const cellAt = function (board, row, column) {
+const freezeBoard = function (board) {
+    return Object.freeze(R.map(function (row) {
+        return Object.freeze(R.map(function (cell) {
+            return Object.freeze(copyCell(cell));
+        }, row));
+    }, board));
+};
+const freezeMove = function (move) {
+    const copy = copyMove(move);
+    if (copy === null) {
+        return null;
+    }
+    return Object.freeze(Object.assign({}, copy, {
+        sequence: Object.freeze(R.map(Object.freeze, copy.sequence))
+    }));
+};
+const freezeState = function (state) {
+    return Object.freeze({
+        board: freezeBoard(state.board),
+        currentPlayer: state.currentPlayer,
+        difficulty: state.difficulty,
+        history: Object.freeze(state.history.slice()),
+        lastMove: freezeMove(state.lastMove),
+        size: state.size,
+        stats: Object.freeze(copyStats(state.stats)),
+        status: state.status,
+        turn: state.turn,
+        turnsTaken: Object.freeze(copyTurns(state.turnsTaken)),
+        winner: state.winner
+    });
+};
+const blankStats = function () {
+    return {
+        finalWinner: null,
+        largestChainReaction: 0,
+        tilesCaptured: 0,
+        totalExplosions: 0,
+        totalTurns: 0
+    };
+};
+const blankTurns = function () {
+    return {
+        blue: 0,
+        red: 0
+    };
+};
+const tileAt = function (board, row, column) {
     return board[row][column];
 };
-
-const makeStats = function () {
-    return {
-        totalTurns: 0,
-        totalExplosions: 0,
-        largestChainReaction: 0,
-        cellsCaptured: 0,
-        finalWinner: null
-    };
+const setTile = function (board, row, column, nextCell) {
+    return R.map(function (boardRow, rowIndex) {
+        return R.map(function (cell, columnIndex) {
+            if (rowIndex === row && columnIndex === column) {
+                return copyCell(nextCell);
+            }
+            return copyCell(cell);
+        }, boardRow);
+    }, board);
 };
-
-const makeTurnsTaken = function () {
-    return {
-        [BLUE]: 0,
-        [RED]: 0
-    };
+const addSlime = function (board, row, column, player) {
+    const cell = tileAt(board, row, column);
+    return setTile(board, row, column, makeCell(player, cell.count + 1, cell.capacity));
 };
-
-const countCellsFor = function (board, player) {
-    return board.flat().filter(function (cell) {
-        return cell.owner === player;
-    }).length;
+const resetTile = function (board, row, column) {
+    return setTile(board, row, column, makeCell(EMPTY_OWNER, 0, tileAt(board, row, column).capacity));
 };
-
-const isUnstable = function (cell) {
+const unstable = function (cell) {
     return cell.owner !== EMPTY_OWNER && cell.count >= cell.capacity;
 };
-
-const findUnstableCells = function (board) {
-    return board.flatMap(function (row, rowIndex) {
-        return row.map(function (cell, columnIndex) {
+const coordinateOf = function (space) {
+    return {
+        column: space.column,
+        row: space.row
+    };
+};
+const boardSpaces = function (board) {
+    return R.flatMap(function (row, rowIndex) {
+        return R.map(function (cell, columnIndex) {
             return {
-                row: rowIndex,
+                cell,
                 column: columnIndex,
-                cell
+                row: rowIndex
             };
-        }).filter(function (space) {
-            return isUnstable(space.cell);
-        }).map(function (space) {
-            return {
-                row: space.row,
-                column: space.column
-            };
-        });
-    });
+        }, row);
+    }, board);
 };
-
-const addOrbToCell = function (board, row, column, player) {
-    const cell = cellAt(board, row, column);
-
-    return setCell(
-        board,
-        row,
-        column,
-        makeCell(player, cell.count + 1, cell.capacity)
-    );
+const unstableTiles = function (board) {
+    return R.pipe(
+        boardSpaces,
+        R.filter(function (space) {
+            return unstable(space.cell);
+        }),
+        R.map(coordinateOf)
+    )(board);
 };
-
-const resetExplodedCell = function (board, row, column) {
-    const cell = cellAt(board, row, column);
-
-    return setCell(
-        board,
-        row,
-        column,
-        makeCell(EMPTY_OWNER, 0, cell.capacity)
-    );
-};
-
-const explodeCell = function (board, row, column) {
-    const explodingCell = cellAt(board, row, column);
-    const explodingPlayer = explodingCell.owner;
-    const neighbours = getNeighbours(board.length, row, column);
-
-    return neighbours.reduce(function (result, neighbour) {
-        const before = cellAt(result.board, neighbour.row, neighbour.column);
-        const captured = (
-            before.owner !== EMPTY_OWNER
-            && before.owner !== explodingPlayer
-        );
-
-        return {
-            board: addOrbToCell(
-                result.board,
-                neighbour.row,
-                neighbour.column,
-                explodingPlayer
-            ),
-            cellsCaptured: result.cellsCaptured + (captured ? 1 : 0)
-        };
-    }, {
-        board: resetExplodedCell(board, row, column),
-        cellsCaptured: 0
-    });
-};
-
-const withWinnerApplied = function (state, winner) {
-    const won = winner !== null;
-
+const snapshot = function (state) {
     return {
-        ...state,
-        status: won ? "won" : "playing",
-        winner,
-        stats: {
-            ...state.stats,
-            finalWinner: winner
-        }
-    };
-};
-
-const stateSnapshot = function (state) {
-    return {
+        board: copyBoard(state.board),
+        currentPlayer: state.currentPlayer,
         difficulty: state.difficulty,
+        lastMove: copyMove(state.lastMove),
         size: state.size,
-        board: copyBoard(state.board),
-        currentPlayer: state.currentPlayer,
-        turn: state.turn,
-        turnsTaken: copyTurnsTaken(state.turnsTaken),
-        status: state.status,
-        winner: state.winner,
         stats: copyStats(state.stats),
-        lastMove: copyLastMove(state.lastMove)
+        status: state.status,
+        turn: state.turn,
+        turnsTaken: copyTurns(state.turnsTaken),
+        winner: state.winner
     };
 };
-
-const stateForHistory = function (state) {
-    return JSON.stringify(stateSnapshot(state));
-};
-
-const stateForSave = function (state) {
-    return JSON.stringify({
-        ...stateSnapshot(state),
-        history: state.history.slice()
-    });
-};
-
 const normaliseState = function (state) {
-    return freezeState({
-        difficulty: state.difficulty ?? DEFAULT_DIFFICULTY,
-        size: state.size,
-        board: copyBoard(state.board),
-        currentPlayer: state.currentPlayer,
-        turn: state.turn,
-        turnsTaken: copyTurnsTaken(state.turnsTaken),
-        status: state.status,
-        winner: state.winner,
-        stats: copyStats(state.stats),
-        lastMove: copyLastMove(state.lastMove),
-        history: (state.history ?? []).slice()
-    });
-};
-
-const actionSummary = function (player, row, column, resolution) {
-    const location = formatCoordinate(row, column);
-
-    if (resolution.explosions === 0) {
-        return `${formatPlayer(player)} charged ${location}.`;
+    let history = [];
+    if (state.history !== undefined) {
+        history = state.history;
     }
-
-    return `${formatPlayer(player)} triggered ${resolution.explosions} explosion${resolution.explosions === 1 ? "" : "s"} from ${location}.`;
+    return freezeState(Object.assign({}, snapshot(state), {
+        history: history.slice()
+    }));
 };
-
 /**
- * Convert a player id into display text.
- *
- * @param {Player} player Player id.
- * @returns {string} Display label.
+ * Return the name used for a slime team in messages and labels.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.Player} player The player to name.
+ * @returns {string} The display name for that player.
  */
-export function formatPlayer(player) {
-    return player === BLUE ? "Blue" : "Red";
+function formatPlayer(player) {
+    return PLAYER_NAMES[player];
 }
-
 /**
- * Convert a coordinate into a board label.
- *
- * @param {number} row Zero-based row.
- * @param {number} column Zero-based column.
- * @returns {string} Human-readable coordinate.
+ * Turn row and column numbers into a pond label, such as A1.
+ * @memberof SlimeReaction
+ * @function
+ * @param {number} row The zero-based row.
+ * @param {number} column The zero-based column.
+ * @returns {string} The label shown to the player.
  */
-export function formatCoordinate(row, column) {
+function formatCoordinate(row, column) {
     return `${String.fromCharCode(65 + column)}${row + 1}`;
 }
-
+const placementSummary = function (player, row, column, result) {
+    const location = formatCoordinate(row, column);
+    let plural = "s";
+    if (result.explosions === 0) {
+        return `${formatPlayer(player)} charged ${location}.`;
+    }
+    if (result.explosions === 1) {
+        plural = "";
+    }
+    return (
+        `${formatPlayer(player)} triggered ${result.explosions} explosion` +
+        `${plural} from ${location}.`
+    );
+};
 /**
- * Determine a cell's critical mass from its orthogonal neighbour count.
- *
- * @param {number} size Board width and height.
- * @param {number} row Zero-based row.
- * @param {number} column Zero-based column.
- * @returns {number} Capacity: 2 for corners, 3 for edges, 4 for centre cells.
+ * Return the tiles touching a pond tile horizontally or vertically.
+ * Diagonal tiles are not neighbours in Slime Reaction.
+ * @memberof SlimeReaction
+ * @function
+ * @param {number} size The width and height of the square pond.
+ * @param {number} row The zero-based row.
+ * @param {number} column The zero-based column.
+ * @returns {SlimeReaction.Coordinate[]} The neighbouring tile coordinates.
  */
-export function determineCellCapacity(size, row, column) {
-    return ORTHOGONAL_DIRECTIONS.filter(function (direction) {
-        return isInBounds(size, row + direction.row, column + direction.column);
-    }).length;
+function getAdjacentTiles(size, row, column) {
+    return R.pipe(
+        R.map(function (direction) {
+            return {
+                column: column + direction.column,
+                row: row + direction.row
+            };
+        }),
+        R.filter(function (coordinate) {
+            return inBounds(size, coordinate.row, coordinate.column);
+        })
+    )(DIRECTIONS);
 }
-
 /**
- * Get orthogonal neighbours for a board position.
- *
- * @param {number} size Board width and height.
- * @param {number} row Zero-based row.
- * @param {number} column Zero-based column.
- * @returns {Coordinate[]} Neighbour coordinates.
+ * Return how many slimes a tile can hold before it splits.
+ * Corners hold 2, edges hold 3, and centre tiles hold 4.
+ * @memberof SlimeReaction
+ * @function
+ * @param {number} size The width and height of the square pond.
+ * @param {number} row The zero-based row.
+ * @param {number} column The zero-based column.
+ * @returns {number} The split capacity for that tile.
  */
-export function getNeighbours(size, row, column) {
-    return ORTHOGONAL_DIRECTIONS.map(function (direction) {
-        return {
-            row: row + direction.row,
-            column: column + direction.column
-        };
-    }).filter(function (coordinate) {
-        return isInBounds(size, coordinate.row, coordinate.column);
-    });
+function getTileCapacity(size, row, column) {
+    return getAdjacentTiles(size, row, column).length;
 }
-
 /**
- * Create an empty board with capacity embedded in every cell.
- *
- * @param {number} size Board width and height.
- * @returns {Cell[][]} Empty board.
+ * Create a new empty pond.
+ * Every tile starts empty and gets the right split capacity for its position.
+ * @memberof SlimeReaction
+ * @function
+ * @param {number} size The width and height of the square pond.
+ * @returns {SlimeReaction.PondTile[][]} An empty pond for a new game.
  */
-export function createBoard(size) {
-    if (!isValidSize(size)) {
+function createEmptyPond(size) {
+    if (!validSize(size)) {
         throw new RangeError("Board size must be an integer from 3 to 10.");
     }
-
-    return range(size).map(function (row) {
-        return range(size).map(function (column) {
-            return emptyCell(size, row, column);
-        });
-    });
+    return R.map(function (row) {
+        return R.map(function (column) {
+            return makeCell(EMPTY_OWNER, 0, getTileCapacity(size, row, column));
+        }, R.range(0, size));
+    }, R.range(0, size));
 }
-
 /**
- * Create a new game.
- *
- * @param {{ difficulty?: Difficulty, size?: number }} [options] Game options.
- * @returns {Readonly<object>} Immutable game state.
+ * Create a fresh game, with Blue ready to place the first slime.
+ * If no options are given, the easy board is used.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameOptions} [options] The game setup.
+ * @returns {SlimeReaction.GameState} The starting game state.
  */
-export function createGame(options = {}) {
-    const difficulty = options.difficulty ?? DEFAULT_DIFFICULTY;
-    const size = options.size ?? DIFFICULTY_SIZES[difficulty];
-
-    if (!isValidDifficulty(difficulty) && options.size === undefined) {
+function startNewGame(options = {}) {
+    const difficulty = (
+        options.difficulty === undefined
+        ? DEFAULT_DIFFICULTY
+        : options.difficulty
+    );
+    const size = (
+        options.size === undefined
+        ? DIFFICULTY_SIZES[difficulty]
+        : options.size
+    );
+    if (!validDifficulty(difficulty) && options.size === undefined) {
         throw new RangeError("Difficulty must be easy, medium, or hard.");
     }
-
-    if (!isValidSize(size)) {
+    if (!validSize(size)) {
         throw new RangeError("Board size must be an integer from 3 to 10.");
     }
-
     return freezeState({
-        difficulty,
-        size,
-        board: createBoard(size),
+        board: createEmptyPond(size),
         currentPlayer: BLUE,
-        turn: 1,
-        turnsTaken: makeTurnsTaken(),
-        status: "playing",
-        winner: null,
-        stats: makeStats(),
+        difficulty,
+        history: [],
         lastMove: null,
-        history: []
+        size,
+        stats: blankStats(),
+        status: "playing",
+        turn: 1,
+        turnsTaken: blankTurns(),
+        winner: null
     });
 }
-
 /**
- * Start a new game using the same options as an existing state.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {Readonly<object>} Fresh game state.
+ * Start the same match setup again from an empty pond.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The current game state.
+ * @returns {SlimeReaction.GameState} A fresh game with the same setup.
  */
-export function restart(state) {
-    return createGame({
-        difficulty: state.difficulty,
-        size: state.size
-    });
+function restartGame(state) {
+    return startNewGame({difficulty: state.difficulty, size: state.size});
 }
-
 /**
- * Return a defensive copy of the board.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {Cell[][]} Board copy.
+ * Return a copy of the whole pond.
+ * Changing the returned pond will not change the game state.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {SlimeReaction.PondTile[][]} A copy of the pond.
  */
-export function getBoard(state) {
+function getPond(state) {
     return copyBoard(state.board);
 }
-
 /**
- * Return one cell, or null when out of bounds.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {number} row Zero-based row.
- * @param {number} column Zero-based column.
- * @returns {Cell | null} Cell copy.
+ * Return a copy of one pond tile.
+ * If the coordinate is outside the pond, return null.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @param {number} row The zero-based row.
+ * @param {number} column The zero-based column.
+ * @returns {(SlimeReaction.PondTile | null)} A tile copy, or null.
  */
-export function getCell(state, row, column) {
-    if (!isInBounds(state.size, row, column)) {
+function getPondTile(state, row, column) {
+    if (!inBounds(state.size, row, column)) {
         return null;
     }
-
-    return copyCell(cellAt(state.board, row, column));
+    return copyCell(tileAt(state.board, row, column));
 }
-
 /**
- * Alias for cell inspection, matching tile-oriented coursework language.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {string} tileId Tile id in "row:column" form.
- * @returns {Cell | null} Cell copy.
+ * Return the player who should make the next move.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {SlimeReaction.Player} The player to move.
  */
-export function getTile(state, tileId) {
-    const parts = String(tileId).split(":").map(Number);
-
-    if (parts.length !== 2) {
-        return null;
-    }
-
-    return getCell(state, parts[0], parts[1]);
-}
-
-/**
- * Return the board for display or tests.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {Cell[][]} Board copy.
- */
-export function getBoardCells(state) {
-    return getBoard(state);
-}
-
-/**
- * Get the current player.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {Player} Current player.
- */
-export function getCurrentPlayer(state) {
+function getPlayerToMove(state) {
     return state.currentPlayer;
 }
-
 /**
- * Get the game status.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {GameStatus} Status.
+ * Return whether the game is still being played or has been won.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {SlimeReaction.GameStatus} The current game status.
  */
-export function getStatus(state) {
+function getGameStatus(state) {
     return state.status;
 }
-
 /**
- * Get the winner after a terminal game.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {Player | null} Winning player or null.
+ * Return the winner of the game.
+ * While the game is still being played, return null.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {(SlimeReaction.Player | null)} The winner, or null.
  */
-export function getWinner(state) {
+function getWinner(state) {
     return state.winner;
 }
-
 /**
- * Get tracked game statistics.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {GameStats} Stats copy.
+ * Return the match statistics shown on the web page.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {object} The turn, explosion, chain, capture, and winner numbers.
  */
-export function getStats(state) {
+function getGameStats(state) {
     return copyStats(state.stats);
 }
-
 /**
- * Get the most recent legal move.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {object | null} Last move copy.
+ * Return a summary of the most recent legal placement.
+ * This is useful for status text and sound effects in the interface.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {(object | null)} The last placement summary, or null.
  */
-export function getLastMove(state) {
-    return copyLastMove(state.lastMove);
+function getLastPlacement(state) {
+    return copyMove(state.lastMove);
 }
-
 /**
- * Determine which player controls a cell.
- *
- * @param {Cell} cell Board cell.
- * @returns {Player | null} Controller.
+ * Count how many tiles and slimes each player controls.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {{blue: SlimeReaction.Score, red: SlimeReaction.Score}} The two scores.
  */
-export function determineTileController(cell) {
-    return cell.owner;
-}
-
-/**
- * Calculate controlled cells and orb totals for both players.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {{ blue: { cells: number, orbs: number }, red: { cells: number, orbs: number } }} Scores.
- */
-export function calculateScores(state) {
-    return PLAYERS.reduce(function (scores, player) {
-        const ownedCells = state.board.flat().filter(function (cell) {
+function getTerritoryScores(state) {
+    const score = function (player) {
+        const tiles = R.filter(function (cell) {
             return cell.owner === player;
-        });
+        }, state.board.flat());
 
         return {
-            ...scores,
-            [player]: {
-                cells: ownedCells.length,
-                orbs: ownedCells.reduce(function (total, cell) {
-                    return total + cell.count;
-                }, 0)
-            }
+            slimes: R.reduce(function (total, cell) {
+                return total + cell.count;
+            }, 0, tiles),
+            tiles: tiles.length
         };
-    }, {});
+    };
+    return {
+        blue: score(BLUE),
+        red: score(RED)
+    };
 }
-
 /**
- * Return cells controlled by a player.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {Player} player Player id.
- * @returns {Coordinate[]} Controlled coordinates.
+ * Return every tile where the current player can place a slime.
+ * Empty tiles and that player's own tiles are legal.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to inspect.
+ * @returns {SlimeReaction.Coordinate[]} The legal placement coordinates.
  */
-export function getControlledTiles(state, player) {
-    if (!isPlayer(player)) {
-        return [];
-    }
-
-    return state.board.flatMap(function (row, rowIndex) {
-        return row.map(function (cell, columnIndex) {
-            return {
-                row: rowIndex,
-                column: columnIndex,
-                owner: cell.owner
-            };
-        }).filter(function (space) {
-            return space.owner === player;
-        }).map(function (space) {
-            return {
-                row: space.row,
-                column: space.column
-            };
-        });
-    });
-}
-
-/**
- * Return all legal target cells for the current player.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {Coordinate[]} Legal move coordinates.
- */
-export function getLegalMoves(state) {
+function getPlayableTiles(state) {
     if (state.status !== "playing") {
         return [];
     }
-
-    return state.board.flatMap(function (row, rowIndex) {
-        return row.map(function (cell, columnIndex) {
-            return {
-                row: rowIndex,
-                column: columnIndex,
-                owner: cell.owner
-            };
-        }).filter(function (space) {
+    return R.pipe(
+        boardSpaces,
+        R.filter(function (space) {
             return (
-                space.owner === EMPTY_OWNER
-                || space.owner === state.currentPlayer
+                space.cell.owner === EMPTY_OWNER
+                || space.cell.owner === state.currentPlayer
             );
-        }).map(function (space) {
-            return {
-                row: space.row,
-                column: space.column
-            };
-        });
-    });
+        }),
+        R.map(coordinateOf)
+    )(state.board);
 }
-
 /**
- * Return available domain actions.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {{ type: "placeOrb", player: Player }[]} Valid action types.
+ * Check whether the current player may place a slime on one tile.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to check.
+ * @param {number} row The zero-based row.
+ * @param {number} column The zero-based column.
+ * @returns {boolean} Whether the placement is legal.
  */
-export function getValidActions(state) {
-    if (state.status !== "playing") {
-        return [];
-    }
-
-    return [
-        {
-            type: "placeOrb",
-            player: state.currentPlayer
-        }
-    ];
-}
-
-/**
- * Return legal targets for a domain action.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {"placeOrb"} actionType Action type.
- * @returns {Coordinate[]} Valid targets.
- */
-export function getValidTargets(state, actionType = "placeOrb") {
-    if (actionType !== "placeOrb") {
-        return [];
-    }
-
-    return getLegalMoves(state);
-}
-
-/**
- * Decide whether the current player may place an orb at a cell.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {number} row Zero-based row.
- * @param {number} column Zero-based column.
- * @returns {boolean} True when legal.
- */
-export function isMoveLegal(state, row, column) {
-    if (state.status !== "playing") {
+function canPlaceSlime(state, row, column) {
+    if (state.status !== "playing" || !inBounds(state.size, row, column)) {
         return false;
     }
-
-    if (!isInBounds(state.size, row, column)) {
-        return false;
-    }
-
-    const cell = cellAt(state.board, row, column);
-
+    const cell = tileAt(state.board, row, column);
     return cell.owner === EMPTY_OWNER || cell.owner === state.currentPlayer;
 }
-
-/**
- * Decide whether an action can be applied.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {Action} action Candidate action.
- * @returns {boolean} True when legal.
- */
-export function canApplyAction(state, action) {
-    return (
-        action !== null
-        && action !== undefined
-        && action.type === "placeOrb"
-        && isMoveLegal(state, action.row, action.column)
-    );
-}
-
-/**
- * Resolve all explosions until the board stabilises.
- *
- * @param {Cell[][]} initialBoard Board after the placed orb.
- * @returns {{ board: Cell[][], explosions: number, largestChainReaction: number, cellsCaptured: number, sequence: object[] }}
- * Resolution result.
- */
-export function resolveChainReactions(initialBoard) {
+const explodeTile = function (board, row, column) {
+    const player = tileAt(board, row, column).owner;
+    return R.reduce(function (result, neighbour) {
+        const before = tileAt(result.board, neighbour.row, neighbour.column);
+        const captured = before.owner !== EMPTY_OWNER && before.owner !== player;
+        return {
+            board: addSlime(result.board, neighbour.row, neighbour.column, player),
+            tilesCaptured: result.tilesCaptured + Number(captured)
+        };
+    }, {
+        board: resetTile(board, row, column),
+        tilesCaptured: 0
+    }, getAdjacentTiles(board.length, row, column));
+};
+function resolveChainReactions(initialBoard) {
     const maxExplosions = initialBoard.length * initialBoard.length * 24;
-
-    const resolveNext = function (board, result) {
-        const unstable = findUnstableCells(board)[0];
-
-        if (unstable === undefined) {
-            return {
-                ...result,
+    const next = function (board, result) {
+        const tile = unstableTiles(board)[0];
+        if (tile === undefined) {
+            return Object.assign({}, result, {
                 board
-            };
+            });
         }
-
         if (result.explosions >= maxExplosions) {
-            return {
-                ...result,
-                board: board.map(function (row) {
-                    return row.map(function (cell) {
-                        if (!isUnstable(cell)) {
+            return Object.assign({}, result, {
+                board: R.map(function (row) {
+                    return R.map(function (cell) {
+                        if (!unstable(cell)) {
                             return copyCell(cell);
                         }
-
                         return makeCell(cell.owner, cell.capacity - 1, cell.capacity);
-                    });
-                })
-            };
+                    }, row);
+                }, board)
+            });
         }
-
-        const owner = cellAt(board, unstable.row, unstable.column).owner;
-        const exploded = explodeCell(board, unstable.row, unstable.column);
-
-        return resolveNext(exploded.board, {
+        const owner = tileAt(board, tile.row, tile.column).owner;
+        const exploded = explodeTile(board, tile.row, tile.column);
+        return next(exploded.board, {
             explosions: result.explosions + 1,
             largestChainReaction: result.largestChainReaction + 1,
-            cellsCaptured: result.cellsCaptured + exploded.cellsCaptured,
             sequence: result.sequence.concat([
                 {
-                    row: unstable.row,
-                    column: unstable.column,
-                    owner
+                    column: tile.column,
+                    owner,
+                    row: tile.row
                 }
-            ])
+            ]),
+            tilesCaptured: result.tilesCaptured + exploded.tilesCaptured
         });
     };
-
-    return resolveNext(copyBoard(initialBoard), {
+    return next(copyBoard(initialBoard), {
         board: copyBoard(initialBoard),
         explosions: 0,
         largestChainReaction: 0,
-        cellsCaptured: 0,
-        sequence: []
+        sequence: [],
+        tilesCaptured: 0
     });
 }
-
-/**
- * Check whether the game has a winner.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {{ status: GameStatus, winner: Player | null }} Status result.
- */
-export function checkGameStatus(state) {
-    const bothPlayersHaveMoved = PLAYERS.every(function (player) {
-        return state.turnsTaken[player] >= OPENING_TURN_REQUIREMENT;
-    });
-
-    if (!bothPlayersHaveMoved) {
+const gameResult = function (state) {
+    const bothMoved = R.every(function (player) {
+        return state.turnsTaken[player] >= OPENING_TURNS;
+    }, PLAYERS);
+    const scores = getTerritoryScores(state);
+    const loser = R.find(function (player) {
+        return scores[player].tiles === 0;
+    }, PLAYERS);
+    if (!bothMoved || loser === undefined) {
         return {
             status: "playing",
             winner: null
         };
     }
-
-    const scores = calculateScores(state);
-    const eliminated = PLAYERS.find(function (player) {
-        return scores[player].cells === 0;
-    });
-
-    if (eliminated === undefined) {
-        return {
-            status: "playing",
-            winner: null
-        };
-    }
-
     return {
         status: "won",
-        winner: otherPlayer(eliminated)
+        winner: otherPlayer(loser)
     };
-}
-
+};
 /**
- * Apply a typed action.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {Action} action Action to apply.
- * @returns {Readonly<object>} Next immutable state, or the same state if illegal.
+ * Place a slime for the current player and resolve the whole chain reaction.
+ * If the move is illegal, the same state is returned.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state before the move.
+ * @param {number} row The zero-based row.
+ * @param {number} column The zero-based column.
+ * @returns {SlimeReaction.GameState} The next game state.
  */
-export function applyAction(state, action) {
-    if (!canApplyAction(state, action)) {
+function placeSlime(state, row, column) {
+    if (!canPlaceSlime(state, row, column)) {
         return state;
     }
-
-    return applyMove(state, action.row, action.column);
-}
-
-/**
- * Place an orb for the current player and resolve all chain reactions.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {number} row Zero-based row.
- * @param {number} column Zero-based column.
- * @returns {Readonly<object>} Next immutable game state, or the same state if illegal.
- */
-export function applyMove(state, row, column) {
-    if (!isMoveLegal(state, row, column)) {
-        return state;
-    }
-
     const player = state.currentPlayer;
-    const boardAfterPlacement = addOrbToCell(state.board, row, column, player);
-    const resolution = resolveChainReactions(boardAfterPlacement);
-    const turnsTaken = {
-        ...state.turnsTaken,
-        [player]: state.turnsTaken[player] + 1
-    };
-    const baseNextState = {
-        difficulty: state.difficulty,
-        size: state.size,
-        board: resolution.board,
+    const result = resolveChainReactions(addSlime(state.board, row, column, player));
+    const turns = copyTurns(state.turnsTaken);
+    turns[player] += 1;
+    const next = {
+        board: result.board,
         currentPlayer: otherPlayer(player),
-        turn: state.turn + 1,
-        turnsTaken,
-        status: "playing",
-        winner: null,
-        stats: {
-            totalTurns: state.stats.totalTurns + 1,
-            totalExplosions: state.stats.totalExplosions + resolution.explosions,
-            largestChainReaction: Math.max(
-                state.stats.largestChainReaction,
-                resolution.largestChainReaction
-            ),
-            cellsCaptured: state.stats.cellsCaptured + resolution.cellsCaptured,
-            finalWinner: null
-        },
-        lastMove: {
+        difficulty: state.difficulty,
+        history: state.history.concat(JSON.stringify(snapshot(state))),
+        lastMove: Object.assign({}, result, {
+            column,
             player,
             row,
-            column,
-            explosions: resolution.explosions,
-            largestChainReaction: resolution.largestChainReaction,
-            cellsCaptured: resolution.cellsCaptured,
-            sequence: resolution.sequence,
-            summary: actionSummary(player, row, column, resolution)
+            summary: placementSummary(player, row, column, result)
+        }),
+        size: state.size,
+        stats: {
+            finalWinner: null,
+            largestChainReaction: Math.max(
+                state.stats.largestChainReaction,
+                result.largestChainReaction
+            ),
+            tilesCaptured: state.stats.tilesCaptured + result.tilesCaptured,
+            totalExplosions: state.stats.totalExplosions + result.explosions,
+            totalTurns: state.stats.totalTurns + 1
         },
-        history: state.history.concat([stateForHistory(state)])
+        status: "playing",
+        turn: state.turn + 1,
+        turnsTaken: turns,
+        winner: null
     };
-    const status = checkGameStatus(baseNextState);
-    const winnerState = withWinnerApplied(baseNextState, status.winner);
-
-    return freezeState({
-        ...winnerState,
-        currentPlayer: status.status === "playing" ? winnerState.currentPlayer : player
-    });
+    const outcome = gameResult(next);
+    return freezeState(Object.assign({}, next, {
+        currentPlayer: (
+            outcome.status === "won"
+            ? player
+            : next.currentPlayer
+        ),
+        stats: Object.assign({}, next.stats, {
+            finalWinner: outcome.winner
+        }),
+        status: outcome.status,
+        winner: outcome.winner
+    }));
 }
-
-/**
- * Alias for course-style action naming.
- *
- * @param {Readonly<object>} state Current game state.
- * @param {number} row Zero-based row.
- * @param {number} column Zero-based column.
- * @returns {Readonly<object>} Next immutable state.
- */
-export function placeOrb(state, row, column) {
-    return applyMove(state, row, column);
-}
-
 /**
  * Undo the most recent legal turn.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {Readonly<object>} Previous immutable state, or the same state.
+ * If there is no turn to undo, return the same state.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to undo from.
+ * @returns {SlimeReaction.GameState} The previous game state.
  */
-export function undo(state) {
+function undoLastTurn(state) {
     const previous = state.history.at(-1);
-
     if (previous === undefined) {
         return state;
     }
-
-    return normaliseState({
-        ...JSON.parse(previous),
+    return normaliseState(Object.assign({}, JSON.parse(previous), {
         history: state.history.slice(0, -1)
-    });
+    }));
 }
-
 /**
- * Serialize a game state for save/load.
- *
- * @param {Readonly<object>} state Current game state.
- * @returns {string} JSON save data.
+ * Save a game state as JSON text.
+ * @memberof SlimeReaction
+ * @function
+ * @param {SlimeReaction.GameState} state The game state to save.
+ * @returns {string} The saved game data.
  */
-export function serializeGame(state) {
-    return stateForSave(state);
+function saveGame(state) {
+    return JSON.stringify(Object.assign({}, snapshot(state), {
+        history: state.history.slice()
+    }));
 }
-
 /**
- * Deserialize a saved game.
- *
- * @param {string | object} json JSON string or parsed object.
- * @returns {Readonly<object>} Immutable game state.
+ * Load a saved game state.
+ * The input may be JSON text or an already parsed object.
+ * @memberof SlimeReaction
+ * @function
+ * @param {(string | object)} json The saved game data.
+ * @returns {SlimeReaction.GameState} The loaded game state.
  */
-export function deserializeGame(json) {
-    const parsed = typeof json === "string" ? JSON.parse(json) : json;
-
+function loadGame(json) {
+    let parsed = json;
+    if (typeof json === "string") {
+        parsed = JSON.parse(json);
+    }
     return normaliseState(parsed);
 }
-
-const SlimeReaction = Object.freeze({
+const SlimeReaction = {
     BLUE,
     RED,
-    PLAYERS,
-    EMPTY_OWNER,
-    DEFAULT_DIFFICULTY,
-    DIFFICULTY_SIZES,
-    formatPlayer,
+    canPlaceSlime,
+    createEmptyPond,
     formatCoordinate,
-    determineCellCapacity,
-    getNeighbours,
-    createBoard,
-    createGame,
-    restart,
-    getBoard,
-    getCell,
-    getTile,
-    getBoardCells,
-    getCurrentPlayer,
-    getStatus,
+    formatPlayer,
+    getAdjacentTiles,
+    getGameStats,
+    getGameStatus,
+    getLastPlacement,
+    getPlayableTiles,
+    getPlayerToMove,
+    getPond,
+    getPondTile,
+    getTerritoryScores,
+    getTileCapacity,
     getWinner,
-    getStats,
-    getLastMove,
-    determineTileController,
-    calculateScores,
-    getControlledTiles,
-    getLegalMoves,
-    getValidActions,
-    getValidTargets,
-    isMoveLegal,
-    canApplyAction,
-    resolveChainReactions,
-    checkGameStatus,
-    applyAction,
-    applyMove,
-    placeOrb,
-    undo,
-    serializeGame,
-    deserializeGame
-});
-
-export default SlimeReaction;
+    loadGame,
+    placeSlime,
+    restartGame,
+    saveGame,
+    startNewGame,
+    undoLastTurn
+};
+export default Object.freeze(SlimeReaction);
