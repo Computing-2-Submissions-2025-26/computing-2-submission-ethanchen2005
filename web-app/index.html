@@ -15,9 +15,6 @@
                     <button id="music_button" class="image_button" type="button" aria-label="Toggle music">
                         <img src="./assets/UI icon/sound-icon.png" alt="">
                     </button>
-                    <button id="settings_button" class="image_button" type="button" aria-label="Settings">
-                        <img src="./assets/UI icon/option-icon.png" alt="">
-                    </button>
                 </div>
 
                 <div class="title_panel">
@@ -28,21 +25,63 @@
                     <section class="mode_card" aria-labelledby="mode_title">
                         <h2 id="mode_title">Game Mode</h2>
                         <div class="mode_toggle" role="group" aria-label="Choose game mode">
-                            <button id="mode_ai_button" class="mode_option active_mode" type="button" data-mode="ai" aria-pressed="true">
+                            <button
+                                id="mode_ai_button"
+                                class="mode_option active_mode"
+                                type="button"
+                                data-mode="ai"
+                                aria-pressed="true"
+                            >
                                 <img src="./assets/mode/ai-mode.png" alt="">
                                 <strong>VS AI</strong>
                             </button>
                             <span class="mode_slider" aria-hidden="true"><span></span></span>
-                            <button id="mode_player_button" class="mode_option" type="button" data-mode="player" aria-pressed="false">
+                            <button
+                                id="mode_player_button"
+                                class="mode_option"
+                                type="button"
+                                data-mode="player"
+                                aria-pressed="false"
+                            >
                                 <strong>VS Player</strong>
                                 <img src="./assets/mode/player-mode.png" alt="">
                             </button>
                         </div>
                     </section>
 
+                    <section class="difficulty_card" aria-labelledby="difficulty_title">
+                        <h2 id="difficulty_title">Difficulty</h2>
+                        <div class="difficulty_choices" role="group" aria-label="Choose difficulty">
+                            <button class="difficulty_option" type="button" data-difficulty="easy" aria-pressed="false">
+                                <strong>Easy</strong>
+                                <span>6x6</span>
+                            </button>
+                            <button
+                                class="difficulty_option active_difficulty"
+                                type="button"
+                                data-difficulty="medium"
+                                aria-pressed="true"
+                            >
+                                <strong>Medium</strong>
+                                <span>8x8</span>
+                            </button>
+                            <button class="difficulty_option" type="button" data-difficulty="hard" aria-pressed="false">
+                                <strong>Hard</strong>
+                                <span>10x10</span>
+                            </button>
+                        </div>
+                    </section>
+
                     <nav class="main_menu" aria-label="Main menu">
                         <button id="play_button" class="slime_button primary_button" type="button">Play</button>
-                        <button id="how_to_play_button" class="slime_button green_button" type="button">How To Play</button>
+                        <button
+                            id="how_to_play_button"
+                            class="slime_button green_button"
+                            type="button"
+                        >
+                            How To Play
+                        </button>
+                        <a class="docs_link" href="../docs/index.html">API Documentation</a>
                     </nav>
                 </div>
             </section>
@@ -51,7 +90,7 @@
                 <header class="game_header">
                     <h1 id="game_title" class="sr_only">Slime Reaction</h1>
                     <section id="turn_banner" class="turn_banner blue_turn" aria-live="polite">
-                        <img id="turn_image" src="./assets/player/blue-winner.png" alt="">
+                        <img id="turn_image" src="./assets/player/blue-player.png" alt="">
                         <div>
                             <span>Turn <span id="turn_value">1</span></span>
                             <strong id="turn_title">Blue's Turn</strong>
@@ -62,9 +101,6 @@
                         <button id="help_tool_button" class="image_button" type="button" aria-label="How to play">
                             <img src="./assets/UI icon/tutorial-icon.png" alt="">
                         </button>
-                        <button id="settings_tool_button" class="image_button" type="button" aria-label="Settings">
-                            <img src="./assets/UI icon/option-icon.png" alt="">
-                        </button>
                         <button id="home_tool_button" class="image_button" type="button" aria-label="Home">
                             <img src="./assets/UI icon/home-icon.png" alt="">
                         </button>
@@ -74,13 +110,13 @@
                 <div class="game_layout">
                     <aside class="side_panel score_panel" aria-label="Score panel">
                         <section class="leader_card blue_card">
-                            <img src="./assets/player/blue-winner.png" alt="">
+                            <img src="./assets/player/blue-player.png" alt="">
                             <h2>Blue Slimes</h2>
                             <strong id="blue_tiles">0</strong>
                             <span>tiles</span>
                         </section>
                         <section class="leader_card pink_card">
-                            <img src="./assets/player/red-winner.png" alt="">
+                            <img src="./assets/player/red-player.png" alt="">
                             <h2>Pink Slimes</h2>
                             <strong id="red_tiles">0</strong>
                             <span>tiles</span>
@@ -117,16 +153,31 @@
                         <section class="info_card">
                             <h2>Next Capacity</h2>
                             <dl class="capacity_list">
-                                <div><dt>Corner</dt><dd>2</dd></div>
-                                <div><dt>Edge</dt><dd>3</dd></div>
-                                <div><dt>Center</dt><dd>4</dd></div>
+                                <div>
+                                    <dt>Corner</dt>
+                                    <dd>2</dd>
+                                </div>
+                                <div>
+                                    <dt>Edge</dt>
+                                    <dd>3</dd>
+                                </div>
+                                <div>
+                                    <dt>Center</dt>
+                                    <dd>4</dd>
+                                </div>
                             </dl>
                         </section>
                         <section class="info_card">
                             <h2>Stats</h2>
                             <dl class="mini_stats">
-                                <div><dt>Largest Chain</dt><dd id="largest_chain">0</dd></div>
-                                <div><dt>Captured</dt><dd id="cells_captured">0</dd></div>
+                                <div>
+                                    <dt>Largest Chain</dt>
+                                    <dd id="largest_chain">0</dd>
+                                </div>
+                                <div>
+                                    <dt>Captured</dt>
+                                    <dd id="tiles_captured">0</dd>
+                                </div>
                             </dl>
                         </section>
                         <section class="assistant_card">
@@ -167,26 +218,27 @@
             </form>
         </dialog>
 
-        <dialog id="settings_dialog" class="modal settings_modal">
-            <form method="dialog">
-                <h2>Settings</h2>
-                <label><span>High contrast</span><input id="high_contrast_toggle" type="checkbox"></label>
-                <label><span>Colour blind symbols</span><input id="colour_blind_toggle" type="checkbox"></label>
-                <label><span>Gentle motion</span><input id="reduced_motion_toggle" type="checkbox"></label>
-                <button class="slime_button primary_button" type="submit">Save</button>
-            </form>
-        </dialog>
-
         <dialog id="game_over_dialog" class="modal game_over_modal">
             <form method="dialog">
                 <img id="winner_image" class="winner_image" src="./assets/player/blue-winner.png" alt="">
                 <h2 id="game_over_title">Blue Slimes Win</h2>
-                <p id="game_over_copy"></p>
                 <dl class="final_stats">
-                    <div><dt>Score</dt><dd id="final_score">0</dd></div>
-                    <div><dt>Turns</dt><dd id="final_turns">0</dd></div>
-                    <div><dt>Largest Combo</dt><dd id="final_chain">0</dd></div>
-                    <div><dt>Captures</dt><dd id="final_captures">0</dd></div>
+                    <div>
+                        <dt>Score</dt>
+                        <dd id="final_score">0</dd>
+                    </div>
+                    <div>
+                        <dt>Turns</dt>
+                        <dd id="final_turns">0</dd>
+                    </div>
+                    <div>
+                        <dt>Largest Combo</dt>
+                        <dd id="final_chain">0</dd>
+                    </div>
+                    <div>
+                        <dt>Captures</dt>
+                        <dd id="final_captures">0</dd>
+                    </div>
                 </dl>
                 <div class="dialog_actions">
                     <button id="play_again_button" class="slime_button primary_button" type="button">Play Again</button>
