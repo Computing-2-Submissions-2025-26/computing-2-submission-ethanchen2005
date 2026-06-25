@@ -1,4 +1,5 @@
-/*jslint browser, long, white */
+/*jslint browser */
+import R from "./ramda.js";
 import SlimeReaction from "./SlimeReaction.js";
 
 const {
@@ -67,25 +68,56 @@ const dom_ids = [
     "game_over_title", "final_score", "final_turns", "final_chain",
     "final_captures"
 ];
-const dom = Object.fromEntries(dom_ids.map(function (id) {
-    return [id, el(id)];
-}));
+const dom = R.reduce(function (result, id) {
+    result[id] = el(id);
+    return result;
+}, {}, dom_ids);
 const {
-    landing_screen, game_screen, game_board, rules_dialog, game_over_dialog,
-    play_button, how_to_play_button, music_button, help_tool_button,
-    home_tool_button, hint_button, undo_button, restart_button,
-    play_again_button, home_after_game_button, turn_banner, turn_image,
-    turn_title, turn_copy, turn_value, blue_tiles, red_tiles, status_output,
-    combo_pop, largest_chain, tiles_captured, assistant_tip, winner_image,
-    game_over_title, final_score, final_turns, final_chain, final_captures
+    landing_screen,
+    game_screen,
+    game_board,
+    rules_dialog,
+    game_over_dialog,
+    play_button,
+    how_to_play_button,
+    music_button,
+    help_tool_button,
+    home_tool_button,
+    hint_button,
+    undo_button,
+    restart_button,
+    play_again_button,
+    home_after_game_button,
+    turn_banner,
+    turn_image,
+    turn_title,
+    turn_copy,
+    turn_value,
+    blue_tiles,
+    red_tiles,
+    status_output,
+    combo_pop,
+    largest_chain,
+    tiles_captured,
+    assistant_tip,
+    winner_image,
+    game_over_title,
+    final_score,
+    final_turns,
+    final_chain,
+    final_captures
 } = dom;
 const selected_cell_box = dom.selected_cell;
-const mode_buttons = Array.from(document.querySelectorAll(".mode_option"));
-const difficulty_buttons = Array.from(document.querySelectorAll(".difficulty_option"));
+const mode_buttons = Array.from(
+    document.querySelectorAll(".mode_option")
+);
+const difficulty_buttons = Array.from(
+    document.querySelectorAll(".difficulty_option")
+);
 
 let mode = "ai";
 let difficulty = "medium";
-let game = startNewGame({ difficulty });
+let game = startNewGame({difficulty});
 let selected_tile = null;
 let changed_tile = null;
 let board_message = "Choose a pond tile.";
@@ -94,7 +126,9 @@ let ai_thinking = false;
 let ai_timer = null;
 let play_cell;
 
-const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+const AudioContextConstructor = (
+    window.AudioContext || window.webkitAudioContext
+);
 const audio_context = (
     AudioContextConstructor === undefined
     ? null
@@ -248,7 +282,12 @@ const set_mode = function (new_mode) {
 
 const set_difficulty = function (new_difficulty) {
     difficulty = new_difficulty;
-    mark_choice(difficulty_buttons, "difficulty", "active_difficulty", difficulty);
+    mark_choice(
+        difficulty_buttons,
+        "difficulty",
+        "active_difficulty",
+        difficulty
+    );
 };
 
 const same_tile = function (tile, row, column) {
@@ -267,7 +306,9 @@ const clear_selection = function () {
 const focus_cell = function (row, column) {
     const r = Math.max(0, Math.min(game.size - 1, row));
     const c = Math.max(0, Math.min(game.size - 1, column));
-    const button = game_board.querySelector(`[data-row="${r}"][data-column="${c}"]`);
+    const button = game_board.querySelector(
+        `[data-row="${r}"][data-column="${c}"]`
+    );
 
     if (button !== null) {
         button.focus();
@@ -325,14 +366,14 @@ const score_move_now = function (state, move) {
 const reply_danger = function (state) {
     const player = getPlayerToMove(state);
 
-    return getPlayableTiles(state).reduce(function (danger, move) {
+    return R.reduce(function (danger, move) {
         const cell = getPondTile(state, move.row, move.column);
 
         if (cell.owner !== player || !is_ready_to_split(cell)) {
             return danger;
         }
         return Math.max(danger, score_move_now(state, move));
-    }, 0);
+    }, 0, getPlayableTiles(state));
 };
 
 const score_ai_move = function (state, move) {
@@ -351,7 +392,7 @@ const score_ai_move = function (state, move) {
 
 const choose_ai_move = function () {
     const moves = getPlayableTiles(game);
-    const best = moves.reduce(function (choice, move) {
+    const best = R.reduce(function (choice, move) {
         const score = score_ai_move(game, move);
 
         if (choice === null || score > choice.score) {
@@ -361,7 +402,7 @@ const choose_ai_move = function () {
             };
         }
         return choice;
-    }, null);
+    }, null, moves);
 
     if (best === null) {
         return null;
@@ -475,7 +516,11 @@ const handle_cell_key = function (event, row, column) {
 
 const make_cell_button = function (cell, row, column) {
     const button = make("button", "pond_cell");
-    const coordinate = make("span", "coordinate", formatCoordinate(row, column));
+    const coordinate = make(
+        "span",
+        "coordinate",
+        formatCoordinate(row, column)
+    );
     const content = make("span", "cell_content");
     const pips = make_markers(cell.capacity, cell.count, "pips");
     const classes = [
@@ -524,13 +569,17 @@ const make_cell_button = function (cell, row, column) {
 
 const redraw_board = function () {
     const board = getPond(game);
+    const cells = R.flatMap(function (row, row_index) {
+        return R.map(function (cell, column_index) {
+            return make_cell_button(cell, row_index, column_index);
+        }, row);
+    }, board);
 
     game_board.style.setProperty("--board-size", String(game.size));
-    game_board.replaceChildren(...board.flatMap(function (row, row_index) {
-        return row.map(function (cell, column_index) {
-            return make_cell_button(cell, row_index, column_index);
-        });
-    }));
+    game_board.replaceChildren();
+    cells.forEach(function (cell) {
+        game_board.append(cell);
+    });
 };
 
 const detail_row = function (label, dots) {
@@ -541,18 +590,28 @@ const detail_row = function (label, dots) {
 
 const redraw_selected_cell = function () {
     if (selected_tile === null) {
-        selected_cell_box.replaceChildren(make("span", "empty_state", "Select a pond tile."));
+        selected_cell_box.replaceChildren(
+            make("span", "empty_state", "Select a pond tile.")
+        );
         return;
     }
 
     const cell = getPondTile(game, selected_tile.row, selected_tile.column);
-    const title = make("strong", "", formatCoordinate(selected_tile.row, selected_tile.column));
+    const title = make(
+        "strong",
+        "",
+        formatCoordinate(selected_tile.row, selected_tile.column)
+    );
     const owner_class = (
         cell.owner === null
         ? "neutral"
         : cell.owner
     );
-    const owner = make("span", `owner_pill ${owner_class}`, owner_name(cell.owner));
+    const owner = make(
+        "span",
+        `owner_pill ${owner_class}`,
+        owner_name(cell.owner)
+    );
     const preview = make("span", "selected_preview");
     const details = make("div", "selected_details");
     const action = make("span", "");
@@ -561,8 +620,18 @@ const redraw_selected_cell = function () {
         preview.append(make_slime_art(cell, "preview"));
     }
     details.replaceChildren(
-        detail_row("Capacity", make_markers(cell.capacity, cell.capacity, "visual_dots capacity_dots")),
-        detail_row("Slimes", make_markers(cell.capacity, cell.count, "visual_dots slime_dots"))
+        detail_row(
+            "Capacity",
+            make_markers(
+                cell.capacity,
+                cell.capacity,
+                "visual_dots capacity_dots"
+            )
+        ),
+        detail_row(
+            "Slimes",
+            make_markers(cell.capacity, cell.count, "visual_dots slime_dots")
+        )
     );
     if (canPlaceSlime(game, selected_tile.row, selected_tile.column)) {
         action.className = "next_action legal_action";
@@ -604,7 +673,9 @@ const redraw_status = function () {
 
     if (!playing) {
         turn_title.textContent = `${player_name(winner)} Wins`;
-        turn_copy.textContent = "The match is over. Play again, undo, or restart.";
+        turn_copy.textContent = (
+            "The match is over. Play again, undo, or restart."
+        );
         assistant_tip.textContent = `${player_name(winner)} wins!`;
     } else if (ai_active) {
         turn_title.textContent = "Pink AI's Turn";
@@ -616,7 +687,9 @@ const redraw_status = function () {
             ? "Blue's Turn"
             : "Pink's Turn"
         );
-        turn_copy.textContent = "Choose an empty pond or one of your own slimes.";
+        turn_copy.textContent = (
+            "Choose an empty pond or one of your own slimes."
+        );
         assistant_tip.textContent = "Pick a glowing tile.";
         if (selected_tile !== null) {
             assistant_tip.textContent = (
@@ -633,7 +706,11 @@ const show_result_dialog = function () {
     const stats = getGameStats(game);
     const scores = getTerritoryScores(game);
 
-    if (getGameStatus(game) !== "won" || winner === null || game_over_dialog.open) {
+    if (
+        getGameStatus(game) !== "won"
+        || winner === null
+        || game_over_dialog.open
+    ) {
         return;
     }
     winner_image.src = player_images.winner[winner];
@@ -707,7 +784,7 @@ const start_game = function () {
     if (game_over_dialog.open) {
         game_over_dialog.close();
     }
-    game = startNewGame({ difficulty });
+    game = startNewGame({difficulty});
     clear_selection();
     board_message = (
         is_ai_mode()
@@ -742,7 +819,7 @@ play_cell = function (row, column) {
         focus_cell(row, column);
         return;
     }
-    play_move({ column, row });
+    play_move({column, row});
     play_move_sound();
     finish_move_message();
     redraw();
@@ -812,7 +889,11 @@ undo_button.onclick = function () {
 
     play_sound("ui");
     clear_ai_timer();
-    if (is_ai_mode() && getPlayerToMove(previous) === ai_player && previous.history.length > 0) {
+    if (
+        is_ai_mode()
+        && getPlayerToMove(previous) === ai_player
+        && previous.history.length > 0
+    ) {
         previous = undoLastTurn(previous);
     }
     game = previous;
